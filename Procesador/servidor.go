@@ -164,10 +164,62 @@ type Disco struct {
 	Host_id                        int
 }
 
+/*
+Estructura de datos tipo JSON que representa la informaciòn de las imagenes que tiene la plataforma Desktop Cloud
+@Repositorio Representa el identificador ùnico del disco en la base de datos. Este identificador es generado automaticamente por la base de datos
+@Tag Representa el nombre del disco
+@ImagenId Representa la ubicaciòn de disco en el host.
+@Creacion Representa el tipo de sistema operativo que tiene el disco. Por ejemplo: Linux
+@Tamanio Representa el tipo de distribuciòn del sistema operativo. Por ejemplo: Debian o Ubuntu
+*/
+
+type Conetendor struct {
+	ConetendorId string
+	Imagen       string
+	Comando      string
+	Creado       string
+	Status       string
+	Puerto       string
+	Nombre       string
+	MaquinaVM    string
+}
+
+type Imagen struct {
+	Repositorio string
+	Tag         string
+	ImagenId    string
+	Creacion    string
+	Tamanio     string
+	MaquinaVM   string
+}
+
+/*
+Estructura de datos tipo JSON que representa la informaciòn de los contenedores que tiene la plataforma Desktop Cloud
+@ConetendorId Representa el identificador ùnico del disco en la base de datos. Este identificador es generado automaticamente por la base de datos
+@Imagen Representa el nombre del disco
+@Comando Representa la ubicaciòn de disco en el host.
+@Creado Representa el tipo de sistema operativo que tiene el disco. Por ejemplo: Linux
+@Status Representa el tipo de distribuciòn del sistema operativo. Por ejemplo: Debian o Ubuntu
+@Puerto Representa la arquitectura del sistema operativo. Se representa en un valor entero. Por ejemplo: 32 o 64
+@Nombre Representa el identificador ùnico del host en el cual està ubicado el disco
+*/
+
+type Docker_imagesQueue struct {
+	sync.Mutex
+	Queue *list.List
+}
+
+type Docker_contenedorQueue struct {
+	sync.Mutex
+	Queue *list.List
+}
+
 // Declaraciòn de variables globales
 var (
 	maquina_virtualesQueue Maquina_virtualQueue
 	managementQueue        ManagementQueue
+	docker_imagesQueue     Docker_imagesQueue
+	docker_contenedorQueue Docker_contenedorQueue
 	mu                     sync.Mutex
 	lastQueueSize          int
 )
@@ -196,6 +248,10 @@ func main() {
 
 	// Función que verifica la cola de cuentas constantemente.
 	go checkManagementQueueChanges()
+
+	go checkImagesQueueChanges()
+
+	go checkContainerQueueChanges()
 
 	// Inicia el servidor HTTP en el puerto 8081.
 	fmt.Println("Servidor escuchando en el puerto 8081...")
@@ -241,6 +297,8 @@ Si la peticiòn es de inicio de sesiòn, la gestiona inmediatamente.
 func manageServer() {
 	maquina_virtualesQueue.Queue = list.New()
 	managementQueue.Queue = list.New()
+	docker_imagesQueue.Queue = list.New()
+	docker_contenedorQueue.Queue = list.New()
 
 	//Endpoint para las peticiones de creaciòn de màquinas virtuales
 	http.HandleFunc("/json/createVirtualMachine", func(w http.ResponseWriter, r *http.Request) {
@@ -762,6 +820,258 @@ func manageServer() {
 		json.NewEncoder(w).Encode(metricas)
 	})
 
+	//Docker UQ
+
+	//EndPoints Para la gestion de Imagenes
+
+	http.HandleFunc("/json/imagenHub", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+		// Ingresar Datos de la Imagen Docker
+
+		imagen := payload["imagen"].(string)
+		version := payload["version"].(string)
+
+		ip := payload["ip"].(string)
+		hostname := payload["hostname"].(string)
+
+		mensaje := CrearImagenDockerHub(imagen, version, ip, hostname)
+
+		fmt.Println(mensaje)
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		response := map[string]string{"mensaje": mensaje}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+
+	})
+
+	http.HandleFunc("/json/imagenTar", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		nombreArchivo := payload["archivo"].(string)
+		nombreImagen := payload["nombreImagen"].(string)
+
+		ip := payload["ip"].(string)
+		hostname := payload["hostname"].(string)
+
+		mensaje := CrearImagenArchivoTar(nombreArchivo, nombreImagen, ip, hostname)
+
+		fmt.Println(mensaje)
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		response := map[string]string{"mensaje": mensaje}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
+
+	http.HandleFunc("/json/imagenDockerFile", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		nombreArchivo := payload["archivo"].(string)
+		nombreImagen := payload["nombreImagen"].(string)
+
+		ip := payload["ip"].(string)
+		hostname := payload["hostname"].(string)
+
+		mensaje := CrearImagenDockerFile(nombreArchivo, nombreImagen, ip, hostname)
+
+		fmt.Println(mensaje)
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		response := map[string]string{"mensaje": mensaje}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
+
+	http.HandleFunc("/json/eliminarImagen", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		mu.Lock()
+		docker_imagesQueue.Queue.PushBack(payload)
+		mu.Unlock()
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		response := map[string]string{"mensaje": "Se elimino la Imagen"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
+
+	http.HandleFunc("/json/imagenesVM", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		ip := payload["ip"].(string)
+		hostname := payload["hostname"].(string)
+
+		imagenes, err := RevisarImagenes(ip, hostname)
+
+		if err != nil && err.Error() != "Fallo en la ejecucion" {
+			fmt.Println(err)
+			log.Println("Error al enviar datos")
+			return
+		}
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(imagenes)
+	})
+
+	//EndPoints Para la gestion de Contenedores
+
+	http.HandleFunc("/json/crearContenedor", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		imagen := payload["imagen"].(string)
+		comando := payload["comando"].(string)
+
+		ip := payload["ip"].(string)
+		hostname := payload["hostname"].(string)
+
+		mensaje := crearContenedor(imagen, comando, ip, hostname)
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		response := map[string]string{"mensaje": mensaje}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
+
+	http.HandleFunc("/json/gestionContenedor", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		mu.Lock()
+		docker_contenedorQueue.Queue.PushBack(payload)
+		mu.Unlock()
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		response := map[string]string{"mensaje": "Comando Exitoso"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+
+	})
+
+	http.HandleFunc("/json/ContenedoresVM", func(w http.ResponseWriter, r *http.Request) {
+		// Verificar que el método HTTP sea POST
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Decodificar el cuerpo JSON de la solicitud
+		var payload map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, "Error al decodificar JSON", http.StatusBadRequest)
+			return
+		}
+
+		ip := payload["ip"].(string)
+		hostname := payload["hostname"].(string)
+
+		contenedor, err := RevisarContenedores(ip, hostname)
+
+		if err != nil && err.Error() != "Fallo en la ejecucion" {
+			fmt.Println(err)
+			log.Println("Error al enviar datos")
+			return
+		}
+
+		// Respondemos con la lista de máquinas virtuales en formato JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(contenedor)
+
+	})
+
 }
 
 func checkMaquinasVirtualesQueueChanges() {
@@ -876,6 +1186,27 @@ func configurarSSH(user string, privateKeyPath string) (*ssh.ClientConfig, error
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
+	return config, nil
+}
+
+/*
+Funciòn que se encarga de realizar la configuraciòn SSH con el host por medio de la contrasenia
+@user Paràmetro que contiene el nombre del usuario al cual se va a conectar
+@privateKeyPath Paràmetro que contiene la ruta de la llave privada SSH
+*/
+
+func configurarSSHContrasenia(user string) (*ssh.ClientConfig, error) {
+
+	fmt.Println("\nconfigurarSSH")
+
+	config := &ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{
+			ssh.Password("uqcloud"),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
 	return config, nil
 }
 
@@ -1428,6 +1759,132 @@ func checkManagementQueueChanges() {
 
 			mu.Lock()
 			managementQueue.Queue.Remove(firstElement)
+			mu.Unlock()
+		}
+
+		time.Sleep(1 * time.Second) //Espera 1 segundo para volver a verificar la cola
+	}
+}
+
+/* Funciòn que se encarga de gestionar la cola de solicitudes para la gestiòn de Imagenes Docker  */
+
+func checkImagesQueueChanges() {
+	for {
+		mu.Lock()
+		currentQueueSize := docker_imagesQueue.Queue.Len()
+		mu.Unlock()
+
+		if currentQueueSize > 0 {
+			mu.Lock()
+			firstElement := docker_imagesQueue.Queue.Front()
+			data, dataPresent := firstElement.Value.(map[string]interface{})
+			mu.Unlock()
+
+			if !dataPresent {
+				fmt.Println("No se pudo procesar la solicitud")
+				mu.Lock()
+				docker_imagesQueue.Queue.Remove(firstElement)
+				mu.Unlock()
+				continue
+			}
+
+			tipoSolicitud, _ := data["solicitud"].(string)
+
+			fmt.Println(tipoSolicitud)
+
+			switch strings.ToLower(tipoSolicitud) {
+
+			case "borar":
+				imagen := data["imagen"].(string)
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+
+				go eliminarImagen(imagen, ip, hostname)
+
+			case "eliminar":
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+				go eliminarTodasImagenes(ip, hostname)
+
+			default:
+				fmt.Println("Tipo de solicitud no válido:", tipoSolicitud)
+			}
+
+			mu.Lock()
+			docker_imagesQueue.Queue.Remove(firstElement)
+			mu.Unlock()
+		}
+
+		time.Sleep(1 * time.Second) //Espera 1 segundo para volver a verificar la cola
+	}
+}
+
+/* Funciòn que se encarga de gestionar la cola de solicitudes para la gestiòn de Contenedores Docker  */
+
+func checkContainerQueueChanges() {
+	for {
+		mu.Lock()
+		currentQueueSize := docker_contenedorQueue.Queue.Len()
+		mu.Unlock()
+
+		if currentQueueSize > 0 {
+			mu.Lock()
+			firstElement := docker_contenedorQueue.Queue.Front()
+			data, dataPresent := firstElement.Value.(map[string]interface{})
+			mu.Unlock()
+
+			if !dataPresent {
+				fmt.Println("No se pudo procesar la solicitud")
+				mu.Lock()
+				docker_contenedorQueue.Queue.Remove(firstElement)
+				mu.Unlock()
+				continue
+			}
+
+			tipoSolicitud, _ := data["solicitud"].(string)
+
+			switch strings.ToLower(tipoSolicitud) {
+			case "correr":
+
+				contenedor := data["contenedor"].(string)
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+
+				go correrContenedor(contenedor, ip, hostname)
+
+			case "pausar":
+
+				contenedor := data["contenedor"].(string)
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+				go detenerContenedor(contenedor, ip, hostname)
+
+			case "reiniciar":
+
+				contenedor := data["contenedor"].(string)
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+				go reiniciarContenedor(contenedor, ip, hostname)
+
+			case "borrar":
+
+				contenedor := data["contenedor"].(string)
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+				go eliminarContenedor(contenedor, ip, hostname)
+
+			case "eliminar":
+
+				ip := data["ip"].(string)
+				hostname := data["hostname"].(string)
+				go eliminarTodosContenedores(ip, hostname)
+
+			default:
+				fmt.Println("Tipo de solicitud no válido:", tipoSolicitud)
+			}
+
+			mu.Lock()
+			docker_contenedorQueue.Queue.Remove(firstElement)
 			mu.Unlock()
 		}
 
@@ -2321,4 +2778,417 @@ func getMetrics() (map[string]interface{}, error) {
 	metricas["total_CPU_usada"] = total_CPU_usada
 
 	return metricas, nil
+}
+
+/*
+Desde aqui empieza el codigo para el funcionamiento de Docker UQ
+*/
+
+func CrearImagenDockerHub(imagen, version, ip, hostname string) string {
+
+	sctlCommand := "docker pull " + imagen + ":" + version
+
+	fmt.Println(hostname)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	respuesta, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return respuesta
+}
+
+func CrearImagenArchivoTar(nombreArchivo, nombreImagen, ip, hostname string) string {
+
+	sctlCommand := "cat /home/" + hostname + "/" + nombreArchivo + " | docker import - " + nombreImagen + ":latest"
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando Envidado con exito"
+}
+
+func CrearImagenDockerFile(nombreArchivo, nombreImagen, ip, hostname string) string {
+
+	sctlCommand := "mkdir /home/" + hostname + "/" + nombreImagen + "&&" + " unzip " + nombreArchivo + " -d /home/" + hostname + "/" + nombreImagen
+
+	fmt.Println(hostname)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	fmt.Println("dockerFile")
+
+	fmt.Println(nombreArchivo)
+
+	sctlCommand = "cd /home/" + hostname + "/" + nombreImagen + "&&" + " docker build -t " + nombreImagen + " ."
+
+	fmt.Println(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	respuesta, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return respuesta
+}
+
+func RevisarImagenes(ip, hostname string) ([]Imagen, error) {
+
+	fmt.Println("Revisar Imagenes:", ip, hostname)
+
+	sctlCommand := "docker images --format " + "{{.Repository}},{{.Tag}},{{.ID}},{{.CreatedAt}},{{.Size}}"
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	fmt.Println("hostname:", hostname)
+
+	if err != nil {
+		log.Println("Fallo en la ejecucion", err)
+		return nil, err
+	}
+
+	lista, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	fmt.Println("Ip:", ip)
+
+	if err3 != nil {
+		log.Println("Fallo en la ejecucion", err)
+		return nil, err
+	}
+
+	res := splitWord(lista)
+
+	tabla := 0
+	datos := make([]string, 5)
+	var imagenes []Imagen
+	maquinaVM := ip + " - " + hostname
+
+	for i := 0; i < len(res); i++ {
+		if tabla == 4 {
+			datos[tabla] = res[i]
+			imagenes = append(imagenes, ingresarDatosImagen(datos, maquinaVM))
+			tabla = 0
+			datos = make([]string, 5)
+		} else {
+			datos[tabla] = res[i]
+			tabla++
+		}
+
+	}
+
+	return imagenes, nil
+
+}
+
+func ingresarDatosImagen(datos []string, maquinaVM string) Imagen {
+
+	nuevaImagen := Imagen{
+		Repositorio: datos[0],
+		Tag:         datos[1],
+		ImagenId:    datos[2],
+		Creacion:    datos[3],
+		Tamanio:     datos[4],
+		MaquinaVM:   maquinaVM,
+	}
+
+	return nuevaImagen
+
+}
+
+func eliminarImagen(imagen, ip, hostname string) string {
+
+	fmt.Println("Eliminar Imagen: ", imagen)
+
+	sctlCommand := "docker rmi " + imagen
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando"
+}
+
+func eliminarTodasImagenes(ip, hostname string) string {
+
+	sctlCommand := "docker rmi $(docker images -a -q)"
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando"
+}
+
+//Funciones para la gestion de los contenedores
+
+func crearContenedor(imagen, comando, ip, hostname string) string {
+
+	sctlCommand := comando + " " + imagen
+
+	fmt.Println("\n" + sctlCommand)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando Enviado con Exito"
+
+}
+
+func correrContenedor(contenedor, ip, hostname string) string {
+
+	fmt.Println("Correr Contenedor")
+
+	sctlCommand := "docker start " + contenedor
+
+	fmt.Println("\n" + sctlCommand)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando Enviado con Exito"
+}
+
+func detenerContenedor(contenedor, ip, hostname string) string {
+
+	fmt.Println("Detener Contenedor")
+
+	sctlCommand := "docker stop " + contenedor
+
+	fmt.Println("\n" + sctlCommand)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando Enviado con Exito"
+}
+
+func reiniciarContenedor(contenedor, ip, hostname string) string {
+
+	fmt.Println("Reiniciar Contenedor")
+
+	sctlCommand := "docker restart " + contenedor
+
+	fmt.Println("\n" + sctlCommand)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando Enviado con Exito"
+}
+
+func eliminarContenedor(contenedor, ip, hostname string) string {
+
+	fmt.Println("Eliminar Contenedor")
+
+	sctlCommand := "docker rm " + contenedor
+
+	fmt.Println("\n" + sctlCommand)
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	return "Comando Enviado con Exito"
+}
+
+func eliminarTodosContenedores(ip, hostname string) string {
+
+	sctlCommand := "docker rm $(docker ps -a -q)"
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+
+	_, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return "Error al configurar la conexiòn SSH"
+	}
+	return "Comando Enviado con Exito"
+}
+
+func RevisarContenedores(ip, hostname string) ([]Conetendor, error) {
+
+	fmt.Println("Revisar Contenedores")
+
+	sctlCommand := "docker ps -a --format  '{{.ID}},{{.Image}},{{.Command}},{{.CreatedAt}},{{.Status}},{{if .Ports}}{{.Ports}}{{else}}No ports exposed{{end}},{{.Names}}'"
+
+	config, err := configurarSSHContrasenia(hostname)
+
+	if err != nil {
+		log.Println("Error al configurar SSH:", err)
+		return nil, err
+	}
+
+	lista, err3 := enviarComandoSSH(ip, sctlCommand, config)
+
+	if err3 != nil {
+		log.Println("Error al configurar SSH:", err)
+		return nil, err
+	}
+
+	res := splitWord(lista)
+
+	tabla := 0
+	datos := make([]string, 7)
+	var contenedores []Conetendor
+	conetendor := 1
+	maquinaVM := ip + " - " + hostname
+
+	for i := 0; i < len(res); i++ {
+		if tabla == 6 {
+			datos[tabla] = res[i]
+			contenedores = append(contenedores, ingresarDatosContenedor(datos, maquinaVM))
+			tabla = 0
+			conetendor++
+			datos = make([]string, 7)
+		} else {
+			datos[tabla] = res[i]
+			tabla++
+		}
+	}
+
+	return contenedores, err
+
+}
+
+func ingresarDatosContenedor(datos []string, maquinaVM string) Conetendor {
+
+	nuevaContenedor := Conetendor{
+		ConetendorId: datos[0],
+		Imagen:       datos[1],
+		Comando:      datos[2],
+		Creado:       datos[3],
+		Status:       datos[4],
+		Puerto:       datos[5],
+		Nombre:       datos[6],
+		MaquinaVM:    maquinaVM,
+	}
+
+	return nuevaContenedor
+
+}
+
+//Funciones complementarias
+
+func splitWord(word string) []string {
+	array := regexp.MustCompile("[,,\n]+").Split(word, -1)
+	return array
 }
