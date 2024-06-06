@@ -874,12 +874,11 @@ func manageServer() {
 		}
 
 		nombreArchivo := payload["archivo"].(string)
-		nombreImagen := payload["nombreImagen"].(string)
 
 		ip := payload["ip"].(string)
 		hostname := payload["hostname"].(string)
 
-		mensaje := CrearImagenArchivoTar(nombreArchivo, nombreImagen, ip, hostname)
+		mensaje := CrearImagenArchivoTar(nombreArchivo, ip, hostname)
 
 		fmt.Println(mensaje)
 
@@ -1795,6 +1794,7 @@ func checkImagesQueueChanges() {
 			switch strings.ToLower(tipoSolicitud) {
 
 			case "borar":
+				fmt.Println("Borrar")
 				imagen := data["imagen"].(string)
 				ip := data["ip"].(string)
 				hostname := data["hostname"].(string)
@@ -2807,9 +2807,9 @@ func CrearImagenDockerHub(imagen, version, ip, hostname string) string {
 	return respuesta
 }
 
-func CrearImagenArchivoTar(nombreArchivo, nombreImagen, ip, hostname string) string {
+func CrearImagenArchivoTar(nombreArchivo, ip, hostname string) string {
 
-	sctlCommand := "cat /home/" + hostname + "/" + nombreArchivo + " | docker import - " + nombreImagen + ":latest"
+	sctlCommand := "docker load < " + nombreArchivo
 
 	config, err := configurarSSHContrasenia(hostname)
 
