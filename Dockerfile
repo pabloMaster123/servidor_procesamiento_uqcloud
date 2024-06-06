@@ -11,4 +11,8 @@ COPY  Codigo .
 WORKDIR /app/servidor_procesamiento_uqcloud/Procesador
 RUN go build -o server servidor.go
 
-# docker cp "nombre contenedor":/app/servidor_procesamiento_uqcloud/Procesador D:\
+# docker build -t servidor-procesamiento-compilado .  -- para crear la imagen con el codigo actual.
+
+# docker run --name s_proc -it servidor-procesamiento-compilado  --  crea el contenedor y se deja ejecutando para que se puedan extraer los ejecutables.
+
+# docker cp s_proc:/app/servidor_procesamiento_uqcloud/Procesador D:\  --  se ejecuta en otra terminal para extraer la carpeta con el comprimido.
