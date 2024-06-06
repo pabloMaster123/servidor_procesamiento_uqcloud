@@ -282,7 +282,7 @@ func checkTime() {
 func manageSqlConecction() {
 	var err error
 
-	db, err = sql.Open("mysql", "root:root@tcp(172.17.0.2)/uqcloud")
+	db, err = sql.Open("mysql", "root:root@tcp(uqcloud)/uqcloud")
 	if err != nil {
 		log.Fatal(err)
 	}
